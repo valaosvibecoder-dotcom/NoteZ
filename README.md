@@ -1,5 +1,7 @@
 # NoteZ
 
+[![Latest Linux release](https://img.shields.io/github/v/release/valaosvibecoder-dotcom/NoteZ?label=Download%20for%20Linux)](https://github.com/valaosvibecoder-dotcom/NoteZ/releases/latest)
+
 NoteZ is a local-first Linux desktop notebook for handwritten notes and sketches. Organize work into notebooks and pages, write with a stylus or mouse, customize the page and ink, and export individual pages as PDFs. Notes are saved on your computer; NoteZ does not currently provide cloud sync or account-based storage.
 
 ## Features
@@ -15,7 +17,7 @@ NoteZ is a local-first Linux desktop notebook for handwritten notes and sketches
 
 ## Install the Linux app
 
-The release download is a single x86-64 Linux AppImage. When a release is published, download `NoteZ-<version>-x86_64.AppImage` from the repository's **Releases** page. For example:
+The download link at the top of this page opens the latest release. Download the x86-64 Linux AppImage named `NoteZ-<version>-x86_64.AppImage`. Then run:
 
 ```bash
 chmod +x NoteZ-1.0.0-x86_64.AppImage
@@ -23,6 +25,17 @@ chmod +x NoteZ-1.0.0-x86_64.AppImage
 ```
 
 AppImages require a compatible Linux system and FUSE support. If your distribution cannot run AppImages, use the source build instructions below or follow your distribution's AppImage/FUSE setup instructions.
+
+## Publish a release
+
+Releases are built and published automatically by GitHub Actions. Update the version in `NoteZ/package.json` and `NoteZ/package-lock.json` to the same version, commit those changes, then push a matching version tag. For example, for version `1.0.1`:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+The workflow builds the AppImage and attaches it to a GitHub Release. The download link above will then point to that release.
 
 ## Run from source
 
