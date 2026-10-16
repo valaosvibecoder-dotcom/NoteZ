@@ -29,11 +29,19 @@ export function normalizeNotes(notes) {
   if (Number.isFinite(smoothing)) notes.settings.smoothing = Math.max(0, Math.min(100, smoothing));
   else delete notes.settings.smoothing;
   if (typeof notes.settings.palmRejection !== 'boolean') delete notes.settings.palmRejection;
+  if (!['pen', 'pencil', 'highlighter', 'marker', 'eraser', 'line', 'text'].includes(notes.settings.activeTool)) delete notes.settings.activeTool;
+  if (!['pen', 'pencil', 'highlighter'].includes(notes.settings.penStyle)) delete notes.settings.penStyle;
+  const strokeWidth = Number(notes.settings.strokeWidth);
+  if (Number.isFinite(strokeWidth)) notes.settings.strokeWidth = Math.max(.5, Math.min(12, strokeWidth));
+  else delete notes.settings.strokeWidth;
   for (const [name, notebookPages] of Object.entries(notes.notebooks)) {
     if (!Array.isArray(notebookPages)) notes.notebooks[name] = [];
     notes.notebooks[name] = notes.notebooks[name].map(page => {
       if (!page || typeof page !== 'object' || Array.isArray(page)) return { title: 'Untitled page', strokes: [] };
       if (typeof page.favorite !== 'boolean') delete page.favorite;
+      const paperHeight = Number(page.paperHeight);
+      if (Number.isFinite(paperHeight) && paperHeight > 0) page.paperHeight = Math.max(1, Math.min(12000, Math.round(paperHeight)));
+      else delete page.paperHeight;
       const lastOpenedAt = Number(page.lastOpenedAt);
       if (Number.isFinite(lastOpenedAt) && lastOpenedAt > 0) page.lastOpenedAt = lastOpenedAt;
       else delete page.lastOpenedAt;

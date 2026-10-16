@@ -10,9 +10,6 @@ if [[ ! -x "$app_binary" ]]; then
   exit 1
 fi
 
-# Electron requires this helper to be root-owned and setuid on Linux. If a
-# rebuild resets those permissions, launch with Chromium's supported fallback
-# so `./Note-Z` still opens without requiring a manual chmod step.
 if [[ -x "$sandbox_helper" && "$(stat -c '%u:%a' "$sandbox_helper" 2>/dev/null || true)" == '0:4755' ]]; then
   exec "$app_binary" "$@"
 else

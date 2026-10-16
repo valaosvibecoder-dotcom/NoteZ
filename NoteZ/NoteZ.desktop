@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NoteZ
+Comment=Open your NoteZ notebooks
+Exec=/home/valaos/Desktop/CSD/Projects/Note-Z/NoteZ/Note-Z
+Icon=/home/valaos/Desktop/CSD/Projects/Note-Z/NoteZ/build/icon.png
+Terminal=false
+Categories=Office;Utility;
+StartupWMClass=NoteZ

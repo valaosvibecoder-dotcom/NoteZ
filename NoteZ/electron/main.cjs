@@ -7,6 +7,14 @@ const notesFile = () => path.join(app.getPath('userData'), 'notebooks.json');
 const waylandFocusState = new WeakMap();
 const usesWayland = process.platform === 'linux' && Boolean(process.env.WAYLAND_DISPLAY);
 
+// Some Linux installations cannot use Electron's setuid sandbox helper because
+// AppImage/unpacked files are owned by the user. Match the project launcher so
+// launching dist/linux-unpacked/NoteZ directly works on those systems too.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
+
 function validNotes(value) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     value.notebooks && typeof value.notebooks === 'object' && !Array.isArray(value.notebooks);
@@ -91,6 +99,7 @@ function createWindow() {
     minWidth: 780,
     minHeight: 560,
     title: 'NoteZ',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#f7f7f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -114,9 +123,20 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 }
 
-app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
-  createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-});
+if (app.requestSingleInstanceLock()) {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show(); win.focus();
+    }
+  });
+  app.whenReady().then(() => {
+    Menu.setApplicationMenu(null);
+    createWindow();
+    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  });
+} else {
+  app.quit();
+}
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

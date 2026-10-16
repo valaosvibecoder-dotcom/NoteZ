@@ -2,12 +2,20 @@
   "name": "notez",
   "version": "1.0.0",
   "description": "A quiet place to write and sketch",
+  "author": "valaosvibecoder-dotcom",
+  "homepage": "https://github.com/valaosvibecoder-dotcom/NoteZ",
+  "desktopName": "NoteZ",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/valaosvibecoder-dotcom/NoteZ.git"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --linux AppImage"
   },
   "devDependencies": {
     "electron": "^42.0.0",
@@ -17,8 +25,14 @@
     "appId": "com.notez.desktop",
     "productName": "NoteZ",
     "executableName": "NoteZ",
-    "files": ["electron/**/*", "src/**/*", "package.json"],
+    "files": ["electron/**/*", "src/**/*", "build/**/*", "package.json"],
     "directories": { "output": "dist" },
-    "linux": { "target": ["dir"], "category": "Office" }
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "syncDesktopName": true
+    }
   }
 }

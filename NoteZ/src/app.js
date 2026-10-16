@@ -9,7 +9,7 @@ import { normalizeNotes } from './notebook-data.js';
   const paper = $('#paper'), surface = $('#pageSurface'), hint = $('#hint'), savedStatus = $('#savedStatus');
   document.body.style.pointerEvents = 'none';
 
-  let data, book, pageIndex = 0, tool = 'pen', color = '#293b34', width = 2.8;
+  let data, book, pageIndex = 0, tool = 'pen', color = '#293b34', width = 2.8, lastRenderedPage = null;
   let smoothing = 40, palmRejection = true, saveTimer;
   const history = new EditHistory();
   const pages = () => data.notebooks[book];
@@ -41,23 +41,33 @@ import { normalizeNotes } from './notebook-data.js';
       dialog.showModal(); input.focus();
     });
   };
-  const save = () => {
+  const save = (immediate = false) => {
     if (!data?.notebooks) return;
     savedStatus.textContent = 'Saving…'; clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
+    const persist = async () => {
       try { await window.notez.save(data); savedStatus.textContent = 'Saved'; }
       catch (error) { console.error('Could not save notes:', error); savedStatus.textContent = 'Save failed'; }
-    }, 250);
+    };
+    if (immediate) void persist();
+    else saveTimer = setTimeout(persist, 250);
   };
+  window.addEventListener('beforeunload', () => {
+    clearTimeout(saveTimer);
+    if (data?.notebooks) void window.notez.save(data);
+  });
   const drawing = createDrawingSurface({
     canvas: $('#canvas'), paper, surface, hint, getPage: () => data && page(), getTool: () => tool,
     getInk: () => color, getWidth: () => width, getSmoothing: () => smoothing,
     getPaperSpacing: () => Number(data?.settings.paperSpacing) || 24,
-    getPalmRejection: () => palmRejection, getText: askText, history, onChange: save,
+    getPalmRejection: () => palmRejection, getText: askText, history, onChange: () => save(true),
     onCycleColor: () => cycleInkPreset()
   });
   const renderPage = () => {
     const current = page();
+    if (current && lastRenderedPage && current !== lastRenderedPage && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      paper.animate([{ opacity: .76 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    }
+    lastRenderedPage = current || null;
     const empty = !current;
     $('#emptyState').hidden = !empty;
     $('.page-head').hidden = empty; paper.hidden = empty; $('.footer').hidden = empty;
@@ -241,11 +251,41 @@ import { normalizeNotes } from './notebook-data.js';
   });
 
   // Drawing tools and ink palette
-  document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => {
-    tool = button.dataset.tool;
-    document.querySelectorAll('[data-tool]').forEach(item => item.classList.toggle('active', item === button));
-    $('#canvas').style.cursor = tool === 'eraser' ? 'cell' : 'crosshair';
+  const penKinds = ['pencil', 'pen', 'highlighter'];
+  let penStyle = 'pen';
+  const penStyleToggle = $('#penStyleToggle'), penStyleMenu = $('#penStyleMenu');
+  document.body.append(penStyleMenu);
+  const renderPenStyle = () => {
+    const label = penStyle === 'highlighter' ? 'Highlighter' : penStyle[0].toUpperCase() + penStyle.slice(1);
+    $('#penStyleLabel').textContent = label;
+    penStyleToggle.title = `Pen style: ${label}`; penStyleToggle.setAttribute('aria-label', `Pen style: ${label}`);
+    penStyleToggle.querySelectorAll('[data-pen-style-icon]').forEach(icon => { icon.hidden = icon.dataset.penStyleIcon !== penStyle; });
+    penStyleMenu.querySelectorAll('[data-pen-style]').forEach(option => option.setAttribute('aria-checked', String(option.dataset.penStyle === penStyle)));
+  };
+  const selectTool = (selected, { persist = true } = {}) => {
+    // Commit any live stroke before changing modes; some tablet drivers omit
+    // pointerup when a toolbar control takes focus.
+    drawing.finishInput();
+    tool = selected;
+    if (penKinds.includes(selected)) penStyle = selected;
+    document.querySelectorAll('[data-tool]').forEach(item => item.classList.toggle('active', item.dataset.tool === selected));
+    penStyleToggle.classList.toggle('active', penKinds.includes(selected));
+    $('#canvas').style.cursor = selected === 'eraser' ? 'cell' : 'crosshair';
+    renderPenStyle();
+    if (persist && data) {
+      data.settings.activeTool = tool; data.settings.penStyle = penStyle; save(true);
+    }
+  };
+  document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => selectTool(button.dataset.tool)));
+  penStyleToggle.addEventListener('click', () => {
+    penStyleMenu.hidden = !penStyleMenu.hidden;
+    penStyleToggle.setAttribute('aria-expanded', String(!penStyleMenu.hidden));
+  });
+  penStyleMenu.querySelectorAll('[data-pen-style]').forEach(option => option.addEventListener('click', () => {
+    selectTool(option.dataset.penStyle);
+    penStyleMenu.hidden = true; penStyleToggle.setAttribute('aria-expanded', 'false');
   }));
+  renderPenStyle();
   const inkToggle = $('#inkToggle'), inkMenu = $('#inkMenu');
   const inkPresets = $('#inkPresets'), inkColorPicker = $('#inkColorPicker');
   // The focus toolbar has a transformed, scrollable ancestor. Keep this fixed
@@ -285,7 +325,7 @@ import { normalizeNotes } from './notebook-data.js';
   const applyColor = (nextColor, selectPen = true) => {
     color = nextColor.toLowerCase(); data.settings.color = color; $('#activeInk').style.backgroundColor = color;
     if ($('#settingsInk')) $('#settingsInk').value = color;
-    renderInkPresets(); if (selectPen) $('[data-tool="pen"]').click(); save();
+    renderInkPresets(); if (selectPen) selectTool('pen'); save();
   };
   function cycleInkPreset() {
     const presets = data?.settings.inkPresets || [];
@@ -366,10 +406,18 @@ import { normalizeNotes } from './notebook-data.js';
     const current = page(); if (!current) return;
     delete current.paperColor; renderPage(); save();
   });
-  $('#width').addEventListener('click', () => {
-    width = width >= 6 ? 1.5 : width < 2 ? 2.8 : width < 4 ? 4.5 : 6.5;
-    $('#widthLabel').textContent = width.toFixed(1); $('#width').title = `Stroke width: ${width}`;
-  });
+  const renderStrokeWidth = () => {
+    $('#widthLabel').value = width.toFixed(1);
+    $('#widthPreview').style.width = `${Math.max(2, Math.min(14, width * 1.15))}px`;
+    $('#widthPreview').style.height = `${Math.max(2, Math.min(14, width * 1.15))}px`;
+  };
+  const adjustStrokeWidth = delta => {
+    width = Math.max(.5, Math.min(12, Math.round((width + delta) * 2) / 2));
+    renderStrokeWidth();
+    if (data) { data.settings.strokeWidth = width; save(true); }
+  };
+  $('#widthDown').addEventListener('click', () => adjustStrokeWidth(-.5));
+  $('#widthUp').addEventListener('click', () => adjustStrokeWidth(.5));
   $('#undo').addEventListener('click', () => {
     if (history.undo(page())) { drawing.draw(); hint.classList.toggle('hide', page().strokes.length > 0); save(); }
   });
@@ -403,10 +451,9 @@ import { normalizeNotes } from './notebook-data.js';
     palmToggle.title = palmRejection ? 'Palm rejection is on: touch contacts cannot draw' : 'Palm rejection is off: finger drawing is enabled';
     $('#palmLabel').textContent = palmRejection ? 'Palm on' : 'Palm off';
     if ($('#settingsPalm')) $('#settingsPalm').checked = palmRejection;
-    // Let pointer events own the writing surface. Touch contacts are filtered
-    // in drawing.js when palm rejection is enabled; browser gesture handling
-    // here could otherwise cancel pen strokes intermittently.
-    $('#canvas').style.touchAction = 'none';
+    // With palm rejection enabled, let finger gestures reach the paper's
+    // native scroll container while stylus pointer events continue to draw.
+    $('#canvas').style.touchAction = palmRejection ? 'pan-x pan-y' : 'none';
   };
   palmToggle.addEventListener('click', () => { palmRejection = !palmRejection; data.settings.palmRejection = palmRejection; renderPalmPreference(); save(); });
   $('#settingsPalm').addEventListener('change', event => {
@@ -427,12 +474,22 @@ import { normalizeNotes } from './notebook-data.js';
     $('#smoothOutput').value = smoothing; $('#settingsSmoothingValue').value = smoothing; save();
   });
   document.addEventListener('pointerdown', event => {
+    if (matchMedia('(max-width: 660px)').matches && document.body.classList.contains('sidebar-open') &&
+        !event.target.closest('.sidebar') && !event.target.closest('#sidebarToggle')) {
+      document.body.classList.remove('sidebar-open');
+      $('#sidebarToggle').setAttribute('aria-expanded', 'false');
+    }
     if (!event.target.closest('.notebook-row')) document.querySelectorAll('.notebook-menu').forEach(menu => { menu.hidden = true; menu.parentElement?.querySelector('.notebook-more')?.setAttribute('aria-expanded', 'false'); });
-    for (const [menu, button] of [[smoothPanel, smoothToggle], [inkMenu, inkToggle], [paperMenu, paperToggle]]) {
+    for (const [menu, button] of [[smoothPanel, smoothToggle], [inkMenu, inkToggle], [paperMenu, paperToggle], [penStyleMenu, penStyleToggle]]) {
       if (!menu.hidden && !menu.contains(event.target) && !button.contains(event.target)) {
         menu.hidden = true; button.setAttribute('aria-expanded', 'false');
       }
     }
+  });
+
+  $('#sidebarToggle').addEventListener('click', () => {
+    const open = document.body.classList.toggle('sidebar-open');
+    $('#sidebarToggle').setAttribute('aria-expanded', String(open));
   });
 
   // Fullscreen notebook focus view
@@ -466,7 +523,7 @@ import { normalizeNotes } from './notebook-data.js';
   $('#addNotebook').addEventListener('click', makeBook);
   $('#sidebarNewPage').addEventListener('click', () => book ? addPage() : makeBook());
   $('#emptyAction').addEventListener('click', () => book ? addPage() : makeBook());
-  $('#widthLabel').textContent = width.toFixed(1);
+  renderStrokeWidth();
   document.addEventListener('keydown', event => {
     if (event.key === 'F11') { event.preventDefault(); focusButton.click(); }
     if ((event.ctrlKey || event.metaKey) && event.key === ',') { event.preventDefault(); openSettings(); return; }
@@ -474,17 +531,23 @@ import { normalizeNotes } from './notebook-data.js';
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); $('#redo').click(); return; }
     if (event.target.matches('input,textarea')) return;
     const shortcuts = { p: 'pen', k: 'pencil', m: 'marker', h: 'highlighter', e: 'eraser', l: 'line', t: 'text' };
-    const selected = shortcuts[event.key.toLowerCase()]; if (selected) $(`[data-tool="${selected}"]`).click();
+    const selected = shortcuts[event.key.toLowerCase()];
+    if (selected && penKinds.includes(selected)) selectTool(selected);
+    else if (selected) $(`[data-tool="${selected}"]`).click();
   });
 
   (async () => {
     try { data = normalizeNotes(await window.notez.load()); }
     catch (error) { console.error('Could not load notes:', error); data = normalizeNotes(null); }
     color = data.settings.color || color;
+    width = Math.max(.5, Math.min(12, Number(data.settings.strokeWidth) || width));
+    tool = ['pen', 'pencil', 'highlighter', 'marker', 'eraser', 'line', 'text'].includes(data.settings.activeTool) ? data.settings.activeTool : 'pen';
+    penStyle = ['pen', 'pencil', 'highlighter'].includes(data.settings.penStyle) ? data.settings.penStyle : (penKinds.includes(tool) ? tool : 'pen');
+    selectTool(tool, { persist: false }); renderStrokeWidth();
     renderInkPresets();
     smoothing = Math.max(0, Math.min(100, Number(data.settings.smoothing ?? 40)));
     palmRejection = data.settings.palmRejection !== false; renderPalmPreference();
-    applyTheme(data.settings.theme || 'light', false);
+    applyTheme(data.settings.theme || 'dark', false);
     refreshPaperAppearance();
     $('#settingsPaper').value = data.settings.paper || 'dots';
     $('#settingsInk').value = color;

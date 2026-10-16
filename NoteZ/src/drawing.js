@@ -90,7 +90,9 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
     }
   };
   const resize = () => {
-    baseWidth = Math.max(1, paper.clientWidth); baseHeight = Math.max(1, paper.clientHeight);
+    const current = getPage();
+    baseWidth = Math.max(1, paper.clientWidth);
+    baseHeight = Math.max(paper.clientHeight, Math.min(12000, Number(current?.paperHeight) || 0));
     layoutSurface();
   };
   const layoutSurface = () => {
@@ -111,6 +113,18 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
     surface.style.backgroundSize = grid === 'dots' ? `${spacing}px ${spacing}px` :
       grid === 'ruled' ? `100% ${spacing}px` : grid === 'squared' ? `${spacing}px ${spacing}px` : '';
     draw();
+  };
+  const growPageForPoint = y => {
+    const current = getPage();
+    if (!current || baseHeight >= 12000 || y < baseHeight - Math.max(100, paper.clientHeight * .14)) return;
+    const step = Math.max(320, Math.round(paper.clientHeight * .45 / 80) * 80);
+    const nextHeight = Math.min(12000, Math.max(baseHeight + step, Math.ceil((y + 160) / 320) * 320));
+    if (nextHeight <= baseHeight) return;
+    baseHeight = nextHeight;
+    current.paperHeight = Math.max(Number(current.paperHeight) || 0, baseHeight);
+    baseWidth = Math.max(1, paper.clientWidth);
+    layoutSurface();
+    onChange();
   };
   const pointSegmentDistance = (p, a, b) => {
     const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
@@ -195,7 +209,9 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
   });
   canvas.addEventListener('pointerdown', async event => {
     if (handlePenBarrelButton(event)) return;
-    if (getPalmRejection() && event.pointerType === 'touch') { event.preventDefault(); return; }
+    // Palm-rejection mode ignores touch as ink input but leaves its default
+    // pan gesture intact so the fingers can scroll the paper.
+    if (getPalmRejection() && event.pointerType === 'touch') return;
     if (event.pointerType === 'mouse' && event.button !== 0 || drawing) return;
     const tool = getTool();
     if (tool === 'text') {
@@ -204,6 +220,7 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
       const text = await getText();
       if (text?.trim()) {
         if (!targetPage) return;
+        growPageForPoint(p.y);
         const stroke = { tool: 'text', text: text.trim(), color: getInk(), width: getWidth(), x: p.x, y: p.y };
         const strokes = targetPage.strokes; strokes.push(stroke); history.record({ type: 'add', stroke, index: strokes.length - 1 });
         hint.classList.add('hide'); draw(); onChange();
@@ -215,6 +232,7 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
     // canvas pointer capture. Electron on Linux can retain stale capture while
     // the window enters or leaves fullscreen, which blocks later pen strokes.
     drawing = true; activePointerId = event.pointerId; lastPoint = point(event);
+    growPageForPoint(lastPoint.y);
     if (tool === 'eraser') { erasing = true; eraseOrigin = getPage().strokes.slice(); eraseBetween(lastPoint, lastPoint); return; }
     activeStroke = { tool, color: getInk(), width: getWidth(), points: [lastPoint] };
     getPage().strokes.push(activeStroke); hint.classList.add('hide'); draw();
@@ -225,6 +243,7 @@ export function createDrawingSurface({ canvas, paper, surface, hint, getPage, ge
     const samples = event.getCoalescedEvents?.() || [];
     for (const sample of samples.length ? samples : [event]) {
       const raw = point(sample);
+      if (!erasing) growPageForPoint(raw.y);
       if (erasing) { eraseBetween(lastPoint, raw); lastPoint = raw; continue; }
       const follow = 1 - (getSmoothing() / 100) * .78;
       lastPoint = {
