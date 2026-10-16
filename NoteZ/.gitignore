@@ -1,5 +1,9 @@
 node_modules/
 dist/
 release/
+data/notebooks.json
+data/notebooks.json.tmp
 *.log
+core
+core.*
 .DS_Store
