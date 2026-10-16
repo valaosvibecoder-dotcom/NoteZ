@@ -1,0 +1,24 @@
+{
+  "name": "notez",
+  "version": "1.0.0",
+  "description": "A quiet place to write and sketch",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.notez.desktop",
+    "productName": "NoteZ",
+    "executableName": "NoteZ",
+    "files": ["electron/**/*", "src/**/*", "package.json"],
+    "directories": { "output": "dist" },
+    "linux": { "target": ["dir"], "category": "Office" }
+  }
+}

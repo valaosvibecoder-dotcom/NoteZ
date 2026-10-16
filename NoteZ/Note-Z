@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+app_binary="$app_dir/dist/linux-unpacked/NoteZ"
+sandbox_helper="$app_dir/dist/linux-unpacked/chrome-sandbox"
+
+if [[ ! -x "$app_binary" ]]; then
+  printf 'NoteZ is not built yet. Run `npm run pack` in %s first.\n' "$app_dir" >&2
+  exit 1
+fi
+
+# Electron requires this helper to be root-owned and setuid on Linux. If a
+# rebuild resets those permissions, launch with Chromium's supported fallback
+# so `./Note-Z` still opens without requiring a manual chmod step.
+if [[ -x "$sandbox_helper" && "$(stat -c '%u:%a' "$sandbox_helper" 2>/dev/null || true)" == '0:4755' ]]; then
+  exec "$app_binary" "$@"
+else
+  exec "$app_binary" --no-sandbox "$@"
+fi

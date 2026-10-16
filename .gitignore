@@ -1,0 +1,12 @@
+# Electron dependencies and packaged output
+NoteZ/node_modules/
+NoteZ/dist/
+
+# Local note content and generated analysis artifacts
+NoteZ/data/
+NoteZ/graphify-out/
+NoteZ/__pycache__/
+*.py[cod]
+
+# Desktop metadata
+.DS_Store
