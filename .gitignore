@@ -2,6 +2,9 @@
 NoteZ/node_modules/
 NoteZ/dist/
 
+# The app's package manifest and lockfile live under NoteZ/.
+/package-lock.json
+
 # Local note content and generated analysis artifacts
 NoteZ/data/
 NoteZ/graphify-out/
